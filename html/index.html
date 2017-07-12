@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test SFU</title>
+</head>
+
+<script src="js/realtimecat.min.js"></script>
+<script src="js/common/jquery.min.js"></script>
+<script src="js/common/config.js"></script>
+<body>
+
+<label for="sel_session">Session选择</label>
+<select id="sel_session">
+</select>
+
+<button id="bt_start" onclick="start()">开始</button>
+<button id="bt_publish" onclick="turnPublish()">开始推流</button>
+<div id="local"></div>
+
+<div id="remotes"></div>
+</body>
+
+<script>
+
+    var stream,session,token,publisher;
+    var tag = "**test-sfu**";
+    var sessionSel = document.getElementById("sel_session");
+    var publishBt = document.getElementById("bt_publish");
+    var startBt = document.getElementById("bt_start");
+
+    window.onload = function () {
+        for(let i in p2p_sessions){
+            let option = document.createElement("option");
+            option.textContent = i;
+            sessionSel.appendChild(option);
+        }
+
+        publishBt.disabled = true;
+    };
+
+    function start(){
+        startBt.disabled = true;
+        let n = Number(sessionSel.value);
+        log("Start session:" + n);
+        getToken(n).then(function (_token) {
+            token = _token;
+            log("my token is " + token);
+            getStream();
+        }).catch(function (e) {
+            loge(e);
+        });
+    }
+
+
+    function getStream() {
+        RTCat.createStream({
+            size:{width:100,height:100},
+            type:RTCat.STREAM_TYPE.AV
+        }).then(function (s) {
+            stream = s;
+            connect(token);
+            stream.play('local',{size:{width:100,height:100}});
+        });
+    }
+
+    function turnPublish() {
+        publishBt.disabled = true;
+
+        if(!publisher){
+            publisher = session.createPublisher(stream);
+            publisher.on("connected",function () {
+                log("publisher connected");
+            });
+            publisher.on("closed",function () {
+                log("publisher closed")
+            });
+
+            session.once("published",function (publisher) {
+                log("session published");
+                publishBt.disabled = false;
+            });
+            session.publish(publisher);
+            publishBt.textContent = "停止推流"
+        }else {
+            session.once("unpublished",function (publisher) {
+                log("session unpublished");
+                publisher.close();
+                publishBt.disabled = false;
+            });
+
+            session.unPublish(publisher);
+            publisher = null;
+            publishBt.textContent = "开始推流";
+        }
+    }
+
+    function createSubscribe(tokenId){
+        let id = "subscribe_" + tokenId;
+        let div = document.createElement("div");
+        div.id = id;
+
+        let text = document.createElement("output");
+        text.textContent = tokenId;
+        let br = document.createElement("br");
+        let button = document.createElement("button");
+        button.textContent = "开始订阅";
+
+        div.appendChild(text);
+        div.appendChild(button);
+        div.appendChild(br);
+
+        document.body.appendChild(div);
+
+        let subscriber;
+        let stream;
+
+        button.onclick = function () {
+            button.disabled = true;
+            if(!subscriber){
+                let _subscriber = session.createSubscriber(tokenId);
+                subscriber = _subscriber;
+                _subscriber.on("connected",function () {
+                    log("subscriber(" + _subscriber.tokenId + ") connected");
+                });
+
+                _subscriber.on("closed",function () {
+                    log("subscriber(" + _subscriber.tokenId + ") closed");
+                });
+
+                _subscriber.on("stream",function (_stream) {
+                    stream = _stream;
+                    stream.play(id,{size:{width:100,height:100}});
+                    log("subscriber(" + _subscriber.tokenId + ") stream");
+                });
+
+                session.once("subscribed",function (subscriber) {
+                    log("session subscribed " + subscriber.tokenId);
+                    button.disabled = false;
+                });
+                session.subscribe(_subscriber);
+                button.textContent = "停止订阅";
+            }else {
+                session.once("unsubscribed",function (subscriber) {
+                    log("session unsubscribed " + subscriber.tokenId);
+                    subscriber.close();
+                    button.disabled = false;
+                });
+
+                session.unSubscribe(subscriber);
+                if(stream){
+                    stream.stop();
+                }
+                subscriber = null;
+                button.textContent = "开始订阅"
+            }
+        };
+    }
+
+    function connect(token) {
+//        session = RTCat.createSFUSession(token,{url:"wss://127.0.0.1:8899"});
+        session = RTCat.createSFUSession(token,{url:"wss://turn.rtcat.cn:8899"});
+        session.on("connect",function () {
+            log("session connect");
+            publishBt.disabled = false;
+        });
+ 
+        session.on("disconnect",function () {
+            log("session disconnect")
+        });
+
+        session.on("stream_created",function (tokenId) {
+            log("session stream created: "+ tokenId );
+
+            createSubscribe(tokenId)
+        });
+
+        session.on("stream_destroyed",function (tokenId) {
+            log("session stream destroyed: " + tokenId);
+            let id = "subscribe_" + tokenId;
+            let div = document.getElementById(id);
+            if(div){
+                document.body.removeChild(div);
+            }
+        });
+
+        session.connect();
+    }
+
+
+    function log(msg) {
+        console.log(tag,msg);
+    }
+    
+    function loge(e) {
+        console.error(tag,e);
+    }
+
+
+
+
+
+</script>
+</html>
