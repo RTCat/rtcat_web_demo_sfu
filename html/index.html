@@ -55,12 +55,12 @@
 
     function getStream() {
         RTCat.createStream({
-            size:{width:100,height:100},
+            size:{width:240,height:180},
             type:RTCat.STREAM_TYPE.AV
         }).then(function (s) {
             stream = s;
             connect(token);
-            stream.play('local',{size:{width:100,height:100}});
+            stream.play('local',{size:{width:240,height:180}});
         });
     }
 
@@ -76,16 +76,17 @@
                 log("publisher closed")
             });
 
-            session.once("published",function (publisher) {
+            session.once("published",function (_publisher) {
                 log("session published");
                 publishBt.disabled = false;
+
             });
             session.publish(publisher);
             publishBt.textContent = "停止推流"
         }else {
-            session.once("unpublished",function (publisher) {
+            session.once("unpublished",function (_publisher) {
                 log("session unpublished");
-                publisher.close();
+                _publisher.close();
                 publishBt.disabled = false;
             });
 
@@ -134,17 +135,21 @@
                     log("subscriber(" + _subscriber.tokenId + ") stream");
                 });
 
-                session.once("subscribed",function (subscriber) {
-                    log("session subscribed " + subscriber.tokenId);
-                    button.disabled = false;
+                session.once("subscribed",function (_subscriber) {
+                    if(_subscriber.tokenId == tokenId){
+                        log("session subscribed " + _subscriber.tokenId);
+                        button.disabled = false;
+                    }
                 });
                 session.subscribe(_subscriber);
                 button.textContent = "停止订阅";
             }else {
-                session.once("unsubscribed",function (subscriber) {
-                    log("session unsubscribed " + subscriber.tokenId);
-                    subscriber.close();
-                    button.disabled = false;
+                session.once("unsubscribed",function (_subscriber) {
+                    if(_subscriber.tokenId == tokenId){
+                        log("session unsubscribed " + _subscriber.tokenId);
+                        _subscriber.close();
+                        button.disabled = false;
+                    }
                 });
 
                 session.unSubscribe(subscriber);
